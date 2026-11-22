@@ -21,7 +21,7 @@ body.light{
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
-body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14px;display:grid;grid-template-columns:250px 1fr;min-width:1000px}
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14px;display:grid;grid-template-columns:250px 1fr;min-width:900px}
 body:before{content:"";position:fixed;inset:0;pointer-events:none;background:radial-gradient(900px 500px at 85% -10%,rgba(77,163,255,.08),transparent 60%),radial-gradient(700px 400px at 10% 110%,rgba(46,204,113,.06),transparent 60%)}
 button{font:inherit;color:inherit;cursor:pointer}
 a{color:inherit}
@@ -41,6 +41,20 @@ aside{position:sticky;top:0;height:100vh;background:var(--bg2);border-right:1px 
 .status{font-family:var(--mono);font-size:11px;color:var(--mut);padding:8px 12px;border:1px dashed var(--line2);border-radius:10px;line-height:1.5}
 .status i{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--xls);margin-right:6px}
 .status.local i{background:var(--note)}
+/* Einklappen */
+body{transition:grid-template-columns .22s ease}
+.sideBtn{margin-left:auto;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--mut);display:grid;place-items:center;flex:none}
+.sideBtn:hover{color:var(--txt);border-color:var(--line2)}
+.sideBtn svg{transition:transform .22s}
+body.col{grid-template-columns:72px 1fr}
+body.col aside{padding:22px 10px}
+body.col .brand{flex-direction:column;padding:0 0 14px;gap:10px}
+body.col .brand .bt{display:none}
+body.col .sideBtn{margin:0}
+body.col .sideBtn svg{transform:rotate(180deg)}
+body.col .nav{font-size:0;justify-content:center;padding:11px 0;gap:0}
+body.col .nav .n,body.col .status{display:none}
+body.col .nav .dot{display:none}
 /* Main */
 main{padding:26px 34px 60px;position:relative;z-index:1;max-width:1500px;width:100%}
 .top{display:flex;align-items:center;gap:12px;margin-bottom:24px}
@@ -138,12 +152,12 @@ textarea.f.note{min-height:340px;font-size:14.5px}
 </head>
 <body>
 <aside>
-  <div class="brand"><div class="logo">BO</div><div><b>ORGANIZER</b><small>Bayazit · PC</small></div></div>
+  <div class="brand"><div class="logo">BO</div><div class="bt"><b>ORGANIZER</b><small>Bayazit · PC</small></div><button class="sideBtn" id="sideBtn" title="Seitenleiste ein-/ausklappen (Strg + B)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button></div>
   <div id="nav"></div>
   <div class="side-foot">
-    <button class="nav" id="themeBtn"><span id="themeIc"></span><span id="themeTx">Hell</span><span class="n">T</span></button>
-    <button class="nav" id="syncBtn"><span id="syIc"></span>Browser-Abgleich<span class="n"></span></button>
-    <button class="nav" id="backupBtn"><span id="bkIc"></span>Sicherung<span class="n"></span></button>
+    <button class="nav" id="themeBtn" title="Hell / Dunkel (T)"><span id="themeIc"></span><span id="themeTx">Hell</span><span class="n">T</span></button>
+    <button class="nav" id="syncBtn" title="Browser-Abgleich"><span id="syIc"></span>Browser-Abgleich<span class="n"></span></button>
+    <button class="nav" id="backupBtn" title="Sicherung"><span id="bkIc"></span>Sicherung<span class="n"></span></button>
     <div class="status local" id="status"><i></i>Verbinde …</div>
   </div>
 </aside>
@@ -410,7 +424,7 @@ function renderNav(){
     if(n[0]==='sep')return'<div class="sep"></div>';
     const k=n[0],T=TYPES[k];const name=T?T.name:n[1],c=T?T.c:n[2];
     const num=k==='home'?items.length:k==='fav'?items.filter(x=>x.fav).length:count(k);
-    return`<button class="nav ${view===k?'on':''}" style="--c:${c}" data-v="${k}"><span style="color:${c}">${I(T?k:n[3],17)}</span>${name}<span class="n">${num}</span></button>`}).join('');
+    return`<button class="nav ${view===k?'on':''}" style="--c:${c}" data-v="${k}" title="${name} (${num})"><span style="color:${c}">${I(T?k:n[3],17)}</span>${name}<span class="n">${num}</span></button>`}).join('');
 }
 document.getElementById('nav').addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(b)go(b.dataset.v)});
 const HASH={home:'start',fav:'favoriten'};Object.keys(TYPES).forEach(k=>HASH[k]=TYPES[k].hash);
@@ -672,6 +686,9 @@ function applyTheme(light){document.body.classList.toggle('light',light);documen
 applyTheme(lsGet('bo-theme',false));
 document.getElementById('themeBtn').onclick=()=>applyTheme(!document.body.classList.contains('light'));
 document.getElementById('backupBtn').onclick=openBackup;
+function setSide(c){document.body.classList.toggle('col',c);lsSet('bo-side',c)}
+setSide(lsGet('bo-side',false));
+document.getElementById('sideBtn').onclick=()=>setSide(!document.body.classList.contains('col'));
 document.getElementById('syncBtn').onclick=openSync;
 document.getElementById('syIc').innerHTML=I('web',17);
 if(sync)setTimeout(()=>{if(mode!=='db')syncNow()},1500);
@@ -684,7 +701,8 @@ q.addEventListener('input',()=>{query=q.value.trim();render()});
 document.addEventListener('keydown',e=>{
   const ov=document.getElementById('ov').classList.contains('on');
   const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
-  if(e.ctrlKey&&e.key.toLowerCase()==='k'){e.preventDefault();q.focus();q.select()}
+  if(e.ctrlKey&&e.key.toLowerCase()==='b'){e.preventDefault();setSide(!document.body.classList.contains('col'))}
+  else if(e.ctrlKey&&e.key.toLowerCase()==='k'){e.preventDefault();q.focus();q.select()}
   else if(e.ctrlKey&&e.key.toLowerCase()==='n'){e.preventDefault();openEditor(null,TYPES[view]?view:'doc')}
   else if(e.key==='Escape'){if(ov)closeEditor();else if(query){q.value='';query='';render()}}
   else if(ov&&e.ctrlKey&&e.key==='Enter'&&document.getElementById('saveBtn')){e.preventDefault();commit()}
