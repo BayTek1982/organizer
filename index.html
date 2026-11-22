@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bayazit Organizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0e14; --bg2:#0f141c; --card:#121925; --card2:#172030; --line:#1f2a3a; --line2:#2a3850;
+  --txt:#e6edf6; --mut:#8a98ad; --dim:#5d6b80;
+  --doc:#4da3ff; --xls:#2ecc71; --note:#f5b942; --mail:#a78bfa; --web:#22d3ee; --fav:#f472b6; --home:#ff8a3d;
+  --danger:#ff5d5d; --shadow:0 10px 30px rgba(0,0,0,.35);
+  --mono:'JetBrains Mono',ui-monospace,Consolas,monospace; --sans:'Inter',system-ui,Segoe UI,sans-serif;
+}
+body.light{
+  --bg:#f3f5f9; --bg2:#e9edf3; --card:#ffffff; --card2:#f6f8fb; --line:#dde3ec; --line2:#c9d2df;
+  --txt:#121826; --mut:#5a6578; --dim:#8a94a6; --shadow:0 8px 24px rgba(20,30,50,.08);
+  --doc:#1f7ae0; --xls:#16a34a; --note:#c98a06; --mail:#7c3aed; --web:#0891b2; --fav:#db2777; --home:#ea580c;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14px;display:grid;grid-template-columns:250px 1fr;min-width:1000px}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;background:radial-gradient(900px 500px at 85% -10%,rgba(77,163,255,.08),transparent 60%),radial-gradient(700px 400px at 10% 110%,rgba(46,204,113,.06),transparent 60%)}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:inherit}
+/* Sidebar */
+aside{position:sticky;top:0;height:100vh;background:var(--bg2);border-right:1px solid var(--line);padding:22px 14px;display:flex;flex-direction:column;gap:4px;z-index:2}
+.brand{display:flex;align-items:center;gap:10px;padding:0 8px 18px}
+.logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--home),var(--fav));display:grid;place-items:center;font-family:var(--mono);font-weight:700;color:#fff;font-size:15px}
+.brand b{font-family:var(--mono);font-size:15px;letter-spacing:.5px;display:block}
+.brand small{color:var(--mut);font-size:11px;font-family:var(--mono)}
+.nav{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid transparent;background:none;text-align:left;width:100%;color:var(--mut);font-weight:500}
+.nav:hover{background:var(--card);color:var(--txt)}
+.nav.on{background:var(--card);border-color:var(--line2);color:var(--txt)}
+.nav .dot{width:9px;height:9px;border-radius:3px;background:var(--c)}
+.nav .n{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--dim)}
+.sep{height:1px;background:var(--line);margin:12px 6px}
+.side-foot{margin-top:auto;display:flex;flex-direction:column;gap:6px}
+.status{font-family:var(--mono);font-size:11px;color:var(--mut);padding:8px 12px;border:1px dashed var(--line2);border-radius:10px;line-height:1.5}
+.status i{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--xls);margin-right:6px}
+.status.local i{background:var(--note)}
+/* Main */
+main{padding:26px 34px 60px;position:relative;z-index:1;max-width:1500px;width:100%}
+.top{display:flex;align-items:center;gap:12px;margin-bottom:24px}
+.search{flex:1;display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:0 14px;height:46px}
+.search:focus-within{border-color:var(--line2);box-shadow:0 0 0 3px rgba(77,163,255,.12)}
+.search input{flex:1;background:none;border:0;outline:0;color:var(--txt);font:inherit;font-size:15px}
+kbd{font-family:var(--mono);font-size:11px;color:var(--mut);border:1px solid var(--line2);border-bottom-width:2px;border-radius:6px;padding:2px 6px;background:var(--card2)}
+.btn{height:46px;padding:0 16px;border-radius:12px;border:1px solid var(--line);background:var(--card);display:inline-flex;align-items:center;gap:8px;font-weight:600;white-space:nowrap}
+.btn:hover{border-color:var(--line2);background:var(--card2)}
+.btn.pri{background:var(--home);border-color:var(--home);color:#fff}
+.btn.pri:hover{filter:brightness(1.08)}
+.btn.sm{height:34px;padding:0 12px;border-radius:9px;font-size:13px}
+.btn.icon{width:46px;padding:0;justify-content:center}
+h1{font-family:var(--mono);font-size:26px;margin:0;letter-spacing:-.3px}
+.h1row{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px}
+.sub{color:var(--mut);margin-top:6px}
+.kicker{font-family:var(--mono);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--c,var(--home));margin-bottom:6px}
+/* Bento */
+.bento{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:28px}
+.tile{position:relative;overflow:hidden;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;text-align:left;display:flex;flex-direction:column;gap:6px;min-height:150px;transition:.15s}
+.tile:hover{border-color:var(--c);transform:translateY(-2px);box-shadow:var(--shadow)}
+.tile:after{content:"";position:absolute;right:-40px;top:-40px;width:140px;height:140px;border-radius:50%;background:var(--c);opacity:.09}
+.tile .ic{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 16%,transparent);color:var(--c)}
+.tile .big{font-family:var(--mono);font-size:34px;font-weight:700;margin-top:auto;line-height:1}
+.tile .lbl{font-family:var(--mono);font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--mut)}
+.tile.w2{grid-column:span 2}.tile.w3{grid-column:span 3}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px}
+.panel h3{font-family:var(--mono);font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mut);margin:0 0 14px;display:flex;align-items:center;gap:8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+/* Items */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.chip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:500;color:var(--mut)}
+.chip.on{border-color:var(--c,var(--home));color:var(--txt);background:color-mix(in srgb,var(--c,var(--home)) 12%,var(--card))}
+.list{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
+.item{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--c);border-radius:14px;padding:14px 14px 12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.item:hover{border-color:var(--line2);border-left-color:var(--c)}
+.ih{display:flex;align-items:center;gap:10px;min-width:0}
+.ih .ic{flex:none;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 15%,transparent);color:var(--c)}
+.ih .t{font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ih .g{font-family:var(--mono);font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:1px}
+.star{margin-left:auto;background:none;border:0;color:var(--dim);font-size:18px;padding:2px 4px;line-height:1}
+.star.on{color:var(--fav)}
+.path{font-family:var(--mono);font-size:12px;color:var(--mut);background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.desc{color:var(--mut);font-size:13px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap}
+.acts{display:flex;gap:6px;margin-top:2px;flex-wrap:wrap}
+.act{border:1px solid var(--line);background:var(--card2);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.act:hover{border-color:var(--c);color:var(--c)}
+.act.ml{margin-left:auto}
+.meta{font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+.row{display:flex;align-items:center;gap:10px;padding:9px 6px;border-bottom:1px solid var(--line);cursor:pointer;border-radius:8px}
+.row:last-child{border-bottom:0}
+.row:hover{background:var(--card2)}
+.row .d{width:8px;height:8px;border-radius:2px;background:var(--c);flex:none}
+.row .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .m{font-family:var(--mono);font-size:11px;color:var(--dim)}
+.empty{border:1px dashed var(--line2);border-radius:16px;padding:40px;text-align:center;color:var(--mut)}
+.empty b{display:block;color:var(--txt);font-size:16px;margin-bottom:6px}
+.hint{font-size:12.5px;color:var(--mut);background:color-mix(in srgb,var(--c,var(--doc)) 8%,var(--card));border:1px solid color-mix(in srgb,var(--c,var(--doc)) 30%,var(--line));border-radius:12px;padding:10px 14px;margin-bottom:16px;line-height:1.5}
+/* Drop */
+#drop{position:fixed;inset:0;background:rgba(10,14,20,.8);display:none;place-items:center;z-index:50;font-family:var(--mono);font-size:22px;color:#fff}
+#drop.on{display:grid}
+#drop div{border:2px dashed var(--home);border-radius:24px;padding:60px 80px;text-align:center}
+/* Modal */
+.ov{position:fixed;inset:0;background:rgba(5,8,12,.6);backdrop-filter:blur(3px);display:none;place-items:center;z-index:40}
+.ov.on{display:grid}
+.modal{width:min(640px,92vw);max-height:90vh;overflow:auto;background:var(--card);border:1px solid var(--line2);border-radius:20px;padding:22px;box-shadow:var(--shadow)}
+.modal.wide{width:min(900px,94vw)}
+.modal h2{font-family:var(--mono);font-size:18px;margin:0 0 16px}
+.types{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px}
+.ty{border:1px solid var(--line);background:var(--card2);border-radius:12px;padding:10px 6px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--mut)}
+.ty svg{color:var(--c)}
+.ty.on{border-color:var(--c);color:var(--txt);background:color-mix(in srgb,var(--c) 12%,var(--card))}
+label{display:block;font-size:12px;font-weight:600;color:var(--mut);margin:12px 0 6px}
+input.f,textarea.f,select.f{width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--txt);font:inherit;outline:0}
+input.f:focus,textarea.f:focus,select.f:focus{border-color:var(--line2);box-shadow:0 0 0 3px rgba(77,163,255,.12)}
+textarea.f{min-height:110px;resize:vertical;line-height:1.5}
+textarea.f.note{min-height:340px;font-size:14.5px}
+.mfoot{display:flex;gap:8px;margin-top:20px;align-items:center}
+.mfoot .sp{flex:1}
+.warn{font-size:12px;color:var(--note);margin-top:6px}
+.danger{color:var(--danger)!important;border-color:color-mix(in srgb,var(--danger) 40%,var(--line))!important}
+#toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(30px);opacity:0;background:var(--card2);border:1px solid var(--line2);color:var(--txt);padding:12px 18px;border-radius:12px;box-shadow:var(--shadow);transition:.25s;z-index:60;max-width:640px;font-size:13.5px;line-height:1.5}
+#toast.on{opacity:1;transform:translateX(-50%)}
+.clock{font-family:var(--mono);color:var(--mut);font-size:12px;text-align:right}
+.clock b{display:block;color:var(--txt);font-size:22px}
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand"><div class="logo">BO</div><div><b>ORGANIZER</b><small>Bayazit · PC</small></div></div>
+  <div id="nav"></div>
+  <div class="side-foot">
+    <button class="nav" id="themeBtn"><span id="themeIc"></span><span id="themeTx">Hell</span><span class="n">T</span></button>
+    <button class="nav" id="backupBtn"><span id="bkIc"></span>Sicherung<span class="n"></span></button>
+    <div class="status local" id="status"><i></i>Verbinde …</div>
+  </div>
+</aside>
+
+<main>
+  <div class="top">
+    <div class="search"><span id="sIc"></span><input id="q" placeholder="Alles durchsuchen – Dokumente, Excel, Notizen, E-Mails, Webseiten …" autocomplete="off"><kbd>Strg K</kbd></div>
+    <button class="btn pri" id="addBtn"><span id="addIc"></span>Neu<kbd style="background:rgba(255,255,255,.18);color:#fff;border-color:rgba(255,255,255,.35)">Strg N</kbd></button>
+  </div>
+  <div id="view"></div>
+</main>
+
+<div id="drop"><div>Dateien hier ablegen<br><span style="font-size:14px;color:#aab">werden als Dokument / Excel eingetragen</span></div></div>
+
+<div class="ov" id="ov"><div class="modal" id="modal"></div></div>
+<div id="toast"></div>
+
+<script>
+/* ---------- Icons ---------- */
+const P={
+ home:'<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
+ doc:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h6"/>',
+ xls:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>',
+ note:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+ mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
+ web:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+ fav:'<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>',
+ search:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
+ sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+ moon:'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+ copy:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+ open:'<path d="M14 3h7v7M21 3l-9 9"/><path d="M19 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/>',
+ edit:'<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+ shield:'<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
+ clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'
+};
+const I=(n,s=18)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${P[n]}</svg>`;
+
+const TYPES={
+ doc:{name:'Dokumente',one:'Dokument',c:'var(--doc)',hash:'dokumente'},
+ xls:{name:'Excel',one:'Excel-Datei',c:'var(--xls)',hash:'excel'},
+ note:{name:'Notizen',one:'Notiz',c:'var(--note)',hash:'notizen'},
+ mail:{name:'E-Mail-Adressen',one:'E-Mail-Adresse',c:'var(--mail)',hash:'emails'},
+ web:{name:'Webseiten',one:'Webseite',c:'var(--web)',hash:'webseiten'}
+};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------- State ---------- */
+let items=[], view='home', group='', query='', db=null, mode='local';
+const LS='bayazit-organizer-v1';
+function lsGet(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+items=lsGet(LS,[]);
+
+/* ---------- Storage (Claude-Datenbank, sonst lokal) ---------- */
+function setStatus(){
+  const s=document.getElementById('status');
+  if(mode==='db'){s.className='status';s.innerHTML='<i></i>Gespeichert in deinem<br>Claude-Konto · privat';}
+  else{s.className='status local';s.innerHTML='<i></i>Nur in diesem Browser<br>gespeichert – Sicherung machen!';}
+}
+function normDocs(snap){
+  let arr=[];
+  if(Array.isArray(snap))arr=snap;else if(snap&&Array.isArray(snap.docs))arr=snap.docs;else if(snap&&typeof snap.forEach==='function'){snap.forEach(d=>arr.push(d))}
+  return arr.map(d=>{
+    let data=d&&typeof d.data==='function'?d.data():(d&&d.data!==undefined?d.data:d);
+    data=Object.assign({},data||{});
+    if(!data.id)data.id=d.id||(d.path||'').split('/').pop();
+    return data;
+  }).filter(x=>x&&x.id&&x.type);
+}
+(async()=>{
+  setStatus();
+  try{
+    if(!window.claude||!claude.use)return;
+    const d=await claude.use('db');
+    if(!d)return;
+    db=d;
+    let loaded=false;
+    const timer=setTimeout(()=>{if(!loaded){db=null;mode='local';setStatus();}},10000);
+    db.collection('items').onSnapshot(snap=>{
+      loaded=true;clearTimeout(timer);
+      const remote=normDocs(snap);
+      // Lokale Einträge, die es online noch nicht gibt, einmalig hochladen
+      if(mode!=='db'){
+        const ids=new Set(remote.map(x=>x.id));
+        const toUp=items.filter(x=>!ids.has(x.id));
+        mode='db';setStatus();
+        toUp.forEach(x=>save(x,true));
+        if(toUp.length){remote.push(...toUp)}
+      }
+      items=remote;lsSet(LS,items);render();
+    },err=>{loaded=true;clearTimeout(timer);console.warn(err);db=null;mode='local';setStatus();});
+  }catch(e){console.warn(e);db=null;mode='local';setStatus();}
+})();
+
+async function save(it,silent){
+  it.updated=Date.now();
+  const i=items.findIndex(x=>x.id===it.id);
+  if(i>=0)items[i]=it;else items.push(it);
+  lsSet(LS,items);
+  if(!silent)render();
+  if(db&&mode==='db'){try{await db.doc('items/'+it.id).set(it)}catch(e){toast('Speichern online fehlgeschlagen – lokal gesichert.')}}
+}
+async function removeItem(id){
+  items=items.filter(x=>x.id!==id);lsSet(LS,items);render();
+  if(db&&mode==='db'){try{await db.doc('items/'+id).delete()}catch(e){}}
+}
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+/* ---------- Helpers ---------- */
+function toast(t,ms=3200){const el=document.getElementById('toast');el.innerHTML=t;el.classList.add('on');clearTimeout(toast._t);toast._t=setTimeout(()=>el.classList.remove('on'),ms)}
+async function copy(t,msg){try{await navigator.clipboard.writeText(t);toast(msg||'Kopiert ✓')}catch(e){toast('Kopieren nicht möglich – bitte manuell markieren: <b>'+esc(t)+'</b>',6000)}}
+const isUrl=s=>/^(https?:\/\/|www\.)/i.test(s||'');
+const fixUrl=s=>/^www\./i.test(s)?'https://'+s:s;
+function when(ts){if(!ts)return'';const d=new Date(ts),n=new Date();const diff=(n-d)/864e5;
+  if(d.toDateString()===n.toDateString())return'heute '+d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+  if(diff<2)return'gestern';return d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'})}
+function matches(it,q){if(!q)return true;q=q.toLowerCase();return[it.title,it.path,it.group,it.text,it.extra].some(v=>(v||'').toLowerCase().includes(q))}
+function count(t){return items.filter(x=>x.type===t).length}
+
+/* ---------- Navigation ---------- */
+const NAV=[['home','Übersicht','var(--home)','home'],['doc'],['xls'],['note'],['mail'],['web'],['sep'],['fav','Favoriten','var(--fav)','fav']];
+function renderNav(){
+  document.getElementById('nav').innerHTML=NAV.map(n=>{
+    if(n[0]==='sep')return'<div class="sep"></div>';
+    const k=n[0],T=TYPES[k];const name=T?T.name:n[1],c=T?T.c:n[2];
+    const num=k==='home'?items.length:k==='fav'?items.filter(x=>x.fav).length:count(k);
+    return`<button class="nav ${view===k?'on':''}" style="--c:${c}" data-v="${k}"><span style="color:${c}">${I(T?k:n[3],17)}</span>${name}<span class="n">${num}</span></button>`}).join('');
+}
+document.getElementById('nav').addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(b)go(b.dataset.v)});
+const HASH={home:'start',fav:'favoriten'};Object.keys(TYPES).forEach(k=>HASH[k]=TYPES[k].hash);
+function go(v){view=v;group='';try{history.replaceState(null,'','#'+HASH[v])}catch(e){location.hash=HASH[v]}render();window.scrollTo(0,0)}
+function fromHash(){const h=location.hash.slice(1);const k=Object.keys(HASH).find(k=>HASH[k]===h);if(k){view=k;group=''}}
+window.addEventListener('hashchange',()=>{fromHash();render()});fromHash();
+
+/* ---------- Render ---------- */
+function render(){
+  renderNav();
+  const v=document.getElementById('view');
+  if(query){v.innerHTML=renderList(items.filter(x=>matches(x,query)),'Suche: „'+esc(query)+'“','var(--home)',true);return}
+  if(view==='home'){v.innerHTML=renderHome();return}
+  if(view==='fav'){v.innerHTML=renderList(items.filter(x=>x.fav),'Favoriten','var(--fav)',true);return}
+  v.innerHTML=renderList(items.filter(x=>x.type===view),TYPES[view].name,TYPES[view].c,false);
+}
+function renderHome(){
+  const d=new Date();
+  const hour=d.getHours();const gr=hour<5?'Gute Nacht':hour<11?'Guten Morgen':hour<18?'Hallo':'Guten Abend';
+  const tile=(k,cls)=>{const T=TYPES[k];return`<button class="tile ${cls||''}" style="--c:${T.c}" data-v="${k}"><div class="ic">${I(k,20)}</div><div class="big">${count(k)}</div><div class="lbl">${T.name}</div></button>`};
+  const recent=[...items].sort((a,b)=>(b.updated||0)-(a.updated||0)).slice(0,8);
+  const favs=items.filter(x=>x.fav).slice(0,8);
+  const row=it=>`<div class="row" style="--c:${TYPES[it.type].c}" data-open="${it.id}"><span class="d"></span><span class="t">${esc(it.title)}</span><span class="m">${TYPES[it.type].one} · ${when(it.updated)}</span></div>`;
+  return`
+  <div class="h1row"><div><div class="kicker">Dashboard</div><h1>${gr}, Tekin</h1><div class="sub">Alles an einem Ort – Dokumente, Excel-Dateien, Notizen, E-Mail-Adressen und Webseiten.</div></div>
+  <div class="clock"><b id="clk">${d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</b>${d.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'})}</div></div>
+  <div class="bento">
+    <button class="tile w2" style="--c:var(--home)" data-new="1"><div class="ic">${I('plus',20)}</div><div style="margin-top:auto;font-family:var(--mono);font-size:18px;font-weight:700">Neuer Eintrag</div><div class="lbl">Strg + N · oder Dateien hineinziehen</div></button>
+    ${tile('doc','w2')}${tile('xls','w2')}
+    ${tile('note','w2')}${tile('mail','w2')}${tile('web','w2')}
+  </div>
+  <div class="grid2">
+    <div class="panel"><h3 style="color:var(--fav)">${I('fav',15)} Favoriten</h3>${favs.length?favs.map(row).join(''):'<div class="sub">Noch keine Favoriten – klicke bei einem Eintrag auf den Stern ☆.</div>'}</div>
+    <div class="panel"><h3>${I('clock',15)} Zuletzt bearbeitet</h3>${recent.length?recent.map(row).join(''):'<div class="sub">Noch leer – lege oben deinen ersten Eintrag an.</div>'}</div>
+  </div>`;
+}
+function hintFor(t){
+  if(t==='doc'||t==='xls')return`<div class="hint" style="--c:${TYPES[t].c}"><b>So öffnest du Dateien vom PC:</b> Klicke auf <b>„Öffnen“</b> – der Pfad wird kopiert. Dann <kbd>Windows</kbd> + <kbd>R</kbd> drücken, <kbd>Strg</kbd> + <kbd>V</kbd> einfügen, <kbd>Enter</kbd>. Links zu OneDrive / Google Drive öffnen sich direkt. Den Pfad bekommst du im Explorer: Datei mit <b>Rechtsklick → „Als Pfad kopieren“</b>.</div>`;
+  if(t==='mail')return`<div class="hint" style="--c:var(--mail)">${I('shield',14)} <b>Keine Passwörter hier speichern.</b> Dafür ist ein Passwort-Manager (z. B. Bitwarden oder der Google-Passwortmanager) da. Hier nur Adresse, Anbieter, Zweck und Login-Seite.</div>`;
+  return'';
+}
+function renderList(list,title,c,mixed){
+  const t=TYPES[view];
+  const groups=[...new Set(list.map(x=>x.group).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'de'));
+  if(group)list=list.filter(x=>x.group===group);
+  list.sort((a,b)=>(b.fav-a.fav)||((b.updated||0)-(a.updated||0)));
+  return`
+  <div class="h1row"><div><div class="kicker" style="--c:${c}">${mixed?'Auswahl':'Bereich'}</div><h1>${title}</h1><div class="sub">${list.length} ${list.length===1?'Eintrag':'Einträge'}</div></div>
+  ${!mixed&&t?`<button class="btn sm" style="border-color:${c}" data-new="${view}">${I('plus',15)} ${t.one} hinzufügen</button>`:''}</div>
+  ${!mixed&&t?hintFor(view):''}
+  ${groups.length?`<div class="chips" style="--c:${c}"><button class="chip ${!group?'on':''}" data-g="">Alle</button>${groups.map(g=>`<button class="chip ${group===g?'on':''}" data-g="${esc(g)}">${esc(g)}</button>`).join('')}</div>`:''}
+  ${list.length?`<div class="list">${list.map(card).join('')}</div>`:`<div class="empty"><b>Hier ist noch nichts.</b>${!mixed&&t?`Lege deinen ersten Eintrag an – oder ziehe Dateien direkt in dieses Fenster.<br><br><button class="btn sm" data-new="${view}">${I('plus',15)} ${t.one} hinzufügen</button>`:'Keine Treffer.'}</div>`}`;
+}
+function card(it){
+  const T=TYPES[it.type];let acts='',body='';
+  if(it.type==='doc'||it.type==='xls'){
+    if(it.path)body+=`<div class="path" title="${esc(it.path)}">${esc(it.path)}</div>`;
+    if(it.path)acts+=isUrl(it.path)?`<a class="act" href="${esc(fixUrl(it.path))}" target="_blank" rel="noopener">${I('open',13)} Öffnen</a>`:`<button class="act" data-openpath="${it.id}">${I('open',13)} Öffnen</button><button class="act" data-copy="${esc(it.path)}">${I('copy',13)} Pfad</button>`;
+  }else if(it.type==='mail'){
+    body+=`<div class="path">${esc(it.path)}</div>`;
+    acts+=`<button class="act" data-copy="${esc(it.path)}">${I('copy',13)} Adresse kopieren</button>`;
+    if(it.extra)acts+=`<a class="act" href="${esc(fixUrl(it.extra))}" target="_blank" rel="noopener">${I('open',13)} Postfach</a>`;
+  }else if(it.type==='web'){
+    body+=`<div class="path">${esc((it.path||'').replace(/^https?:\/\//,''))}</div>`;
+    if(it.path)acts+=`<a class="act" href="${esc(fixUrl(it.path))}" target="_blank" rel="noopener">${I('open',13)} Öffnen</a><button class="act" data-copy="${esc(fixUrl(it.path))}">${I('copy',13)} Link</button>`;
+  }else if(it.type==='note'){
+    acts+=`<button class="act" data-copy-note="${it.id}">${I('copy',13)} Text kopieren</button>`;
+  }
+  if(it.text)body+=`<div class="desc">${esc(it.text)}</div>`;
+  return`<div class="item" style="--c:${T.c}">
+    <div class="ih"><div class="ic">${I(it.type,17)}</div><div style="min-width:0"><div class="t" title="${esc(it.title)}">${esc(it.title)}</div><div class="g">${esc(it.group||T.one)}</div></div>
+    <button class="star ${it.fav?'on':''}" data-fav="${it.id}" title="Favorit">${it.fav?'★':'☆'}</button></div>
+    ${body}
+    <div class="acts">${acts}<button class="act ml" data-edit="${it.id}">${I('edit',13)} Bearbeiten</button></div>
+    <div class="meta">geändert ${when(it.updated)}</div>
+  </div>`;
+}
+
+/* ---------- Clicks ---------- */
+document.getElementById('view').addEventListener('click',e=>{
+  const b=e.target.closest('button,[data-open]');if(!b)return;
+  const d=b.dataset;
+  if(d.v){go(d.v)}
+  else if(d.new!==undefined){openEditor(null,d.new==='1'?(TYPES[view]?view:'doc'):d.new)}
+  else if(d.g!==undefined){group=d.g;render()}
+  else if(d.fav){const it=items.find(x=>x.id===d.fav);if(it){it.fav=!it.fav;save(it)}}
+  else if(d.edit||d.open){openEditor(items.find(x=>x.id===(d.edit||d.open)))}
+  else if(d.copy){copy(d.copy)}
+  else if(d.copyNote){const it=items.find(x=>x.id===d.copyNote);copy(it.text||'','Notiz kopiert ✓')}
+  else if(d.openpath){const it=items.find(x=>x.id===d.openpath);copy(it.path,'Pfad kopiert ✓ – jetzt <kbd>Windows</kbd>+<kbd>R</kbd>, <kbd>Strg</kbd>+<kbd>V</kbd>, <kbd>Enter</kbd>',6000)}
+});
+
+/* ---------- Editor ---------- */
+let edType='doc',edItem=null;
+function fieldsFor(t,it){
+  it=it||{};
+  const g=[...new Set(items.filter(x=>x.type===t).map(x=>x.group).filter(Boolean))];
+  const dl=`<datalist id="gl">${g.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>`;
+  const grp=`<label>Gruppe / Ordner <span style="color:var(--dim);font-weight:400">(z. B. Steuer, Haus, Arbeit, Trading)</span></label><input class="f" id="fGroup" list="gl" value="${esc(it.group)}">${dl}`;
+  if(t==='note')return`<label>Titel</label><input class="f" id="fTitle" value="${esc(it.title)}" placeholder="z. B. Ideen für die Shrinkflation-App">${grp}<label>Notiz</label><textarea class="f note" id="fText" placeholder="Schreib einfach los …">${esc(it.text)}</textarea>`;
+  if(t==='mail')return`<label>E-Mail-Adresse</label><input class="f" id="fPath" value="${esc(it.path)}" placeholder="name@gmail.com"><label>Bezeichnung</label><input class="f" id="fTitle" value="${esc(it.title)}" placeholder="z. B. Privat, Trading, YouTube-Kanal">${grp}<label>Login-Seite / Postfach-Link</label><input class="f" id="fExtra" value="${esc(it.extra)}" placeholder="https://mail.google.com"><label>Notiz <span style="color:var(--dim);font-weight:400">(wofür, Anbieter … aber kein Passwort)</span></label><textarea class="f" id="fText">${esc(it.text)}</textarea><div class="warn">${I('shield',12)} Bitte keine Passwörter eintragen.</div>`;
+  if(t==='web')return`<label>Adresse (URL)</label><input class="f" id="fPath" value="${esc(it.path)}" placeholder="https://…"><label>Name</label><input class="f" id="fTitle" value="${esc(it.title)}" placeholder="z. B. Bayazit Wetter">${grp}<label>Notiz</label><textarea class="f" id="fText">${esc(it.text)}</textarea>`;
+  return`<label>Name</label><input class="f" id="fTitle" value="${esc(it.title)}" placeholder="${t==='xls'?'z. B. Kaffeekasse 2026':'z. B. Steuerbescheid 2024'}"><label>Speicherort – Pfad oder Link</label><input class="f" id="fPath" value="${esc(it.path)}" placeholder="C:\\Users\\Tekin\\Documents\\… oder OneDrive-/Google-Drive-Link"><div style="font-size:12px;color:var(--dim);margin-top:6px">Tipp: Im Explorer Datei mit Rechtsklick → <b>„Als Pfad kopieren“</b>, hier mit Strg + V einfügen.</div>${grp}<label>Notiz</label><textarea class="f" id="fText" placeholder="Worum geht es, was ist zu tun …">${esc(it.text)}</textarea>`;
+}
+function openEditor(it,type){
+  edItem=it||null;edType=it?it.type:(type||'doc');
+  drawEditor();
+  document.getElementById('ov').classList.add('on');
+  setTimeout(()=>{const f=document.getElementById(edType==='mail'||edType==='web'?'fPath':'fTitle');f&&f.focus()},50);
+}
+function drawEditor(){
+  const m=document.getElementById('modal');
+  m.className='modal'+(edType==='note'?' wide':'');
+  const cur=collect();
+  m.innerHTML=`<h2>${edItem?'Bearbeiten':'Neuer Eintrag'}</h2>
+  ${edItem?'':`<div class="types">${Object.keys(TYPES).map(k=>`<button class="ty ${k===edType?'on':''}" style="--c:${TYPES[k].c}" data-ty="${k}">${I(k,20)}${TYPES[k].one.replace('-Adresse','').replace('-Datei','')}</button>`).join('')}</div>`}
+  ${fieldsFor(edType,Object.assign({},edItem||{},cur))}
+  <div class="mfoot">${edItem?`<button class="btn sm danger" id="delBtn">Löschen</button>`:''}<span class="sp"></span>
+  <button class="btn sm" id="cancelBtn">Abbrechen</button><button class="btn sm pri" id="saveBtn">Speichern <kbd style="background:rgba(255,255,255,.18);color:#fff;border-color:rgba(255,255,255,.35)">Strg ↵</kbd></button></div>`;
+}
+function collect(){const v=id=>{const el=document.getElementById(id);return el?el.value:undefined};const o={};[['title','fTitle'],['path','fPath'],['group','fGroup'],['text','fText'],['extra','fExtra']].forEach(([k,id])=>{const x=v(id);if(x!==undefined)o[k]=x});return o}
+function closeEditor(){document.getElementById('ov').classList.remove('on');edItem=null}
+function commit(){
+  const c=collect();
+  c.title=(c.title||'').trim();c.path=(c.path||'').trim();c.group=(c.group||'').trim();
+  if(!c.title&&edType==='mail')c.title=c.path;
+  if(!c.title&&edType==='web')c.title=c.path.replace(/^https?:\/\/(www\.)?/,'').split('/')[0];
+  if(!c.title){toast('Bitte einen Namen eintragen.');return}
+  const it=Object.assign({},edItem||{id:uid(),type:edType,fav:false,created:Date.now()},c);
+  save(it);closeEditor();toast(edItem?'Gespeichert ✓':'Hinzugefügt ✓');
+}
+document.getElementById('modal').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.ty){edType=b.dataset.ty;drawEditor()}
+  else if(b.id==='saveBtn')commit();
+  else if(b.id==='cancelBtn')closeEditor();
+  else if(b.id==='delBtn'){if(b.dataset.sure){const id=edItem.id;closeEditor();removeItem(id);toast('Gelöscht.')}else{b.dataset.sure=1;b.textContent='Wirklich löschen?'}}
+  else if(b.id==='bkCopy'){copy(document.getElementById('bkOut').value,'Sicherung kopiert ✓ – z. B. in eine Textdatei einfügen und speichern.',5000)}
+  else if(b.id==='bkImport'){doImport(document.getElementById('bkIn').value)}
+  else if(b.id==='bkClose')closeEditor();
+});
+document.getElementById('ov').addEventListener('mousedown',e=>{if(e.target.id==='ov')closeEditor()});
+
+/* ---------- Backup ---------- */
+function openBackup(){
+  const m=document.getElementById('modal');m.className='modal wide';
+  m.innerHTML=`<h2>Sicherung</h2>
+  <div class="hint" style="--c:var(--xls)">${mode==='db'?'Deine Einträge sind in deinem Claude-Konto gespeichert und auf jedem PC da, auf dem du angemeldet bist. Eine zusätzliche Sicherung schadet trotzdem nicht.':'Deine Einträge liegen gerade nur in diesem Browser. Mach regelmäßig eine Sicherung!'}</div>
+  <label>1. Sichern – Text kopieren und als Datei speichern (z. B. <b>organizer-sicherung.txt</b>)</label>
+  <textarea class="f" id="bkOut" readonly style="min-height:120px;font-family:var(--mono);font-size:12px">${esc(JSON.stringify(items))}</textarea>
+  <div style="margin-top:8px"><button class="btn sm" id="bkCopy">${I('copy',14)} Sicherung kopieren</button></div>
+  <label style="margin-top:20px">2. Wiederherstellen – Sicherungsdatei wählen oder Text einfügen</label>
+  <input type="file" id="bkFile" accept=".txt,.json" class="f">
+  <textarea class="f" id="bkIn" style="min-height:90px;font-family:var(--mono);font-size:12px;margin-top:8px" placeholder="Sicherungstext hier einfügen …"></textarea>
+  <div class="mfoot"><span class="sp"></span><button class="btn sm" id="bkClose">Schließen</button><button class="btn sm pri" id="bkImport">Einlesen</button></div>`;
+  document.getElementById('ov').classList.add('on');
+  document.getElementById('bkFile').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>document.getElementById('bkIn').value=r.result;r.readAsText(f)});
+}
+function doImport(txt){
+  let arr;try{arr=JSON.parse(txt)}catch(e){toast('Das ist keine gültige Sicherung.');return}
+  if(!Array.isArray(arr)){toast('Das ist keine gültige Sicherung.');return}
+  let n=0;const ids=new Set(items.map(x=>x.id));
+  arr.forEach(x=>{if(x&&x.id&&x.type&&TYPES[x.type]&&!ids.has(x.id)){save(x,true);n++}});
+  render();closeEditor();toast(n+' Einträge eingelesen ✓ (vorhandene bleiben unverändert)');
+}
+
+/* ---------- Drag & Drop ---------- */
+let dragN=0;const drop=document.getElementById('drop');
+window.addEventListener('dragenter',e=>{if([...(e.dataTransfer.types||[])].includes('Files')){dragN++;drop.classList.add('on')}});
+window.addEventListener('dragleave',()=>{dragN=Math.max(0,dragN-1);if(!dragN)drop.classList.remove('on')});
+window.addEventListener('dragover',e=>e.preventDefault());
+window.addEventListener('drop',e=>{
+  e.preventDefault();dragN=0;drop.classList.remove('on');
+  const files=[...(e.dataTransfer.files||[])];if(!files.length)return;
+  files.forEach(f=>{const isX=/\.(xlsx?|xlsm|csv|ods)$/i.test(f.name);
+    save({id:uid(),type:isX?'xls':'doc',title:f.name.replace(/\.[^.]+$/,''),path:'',group:'',text:'Datei: '+f.name+' – Pfad noch eintragen (Rechtsklick → „Als Pfad kopieren“)',fav:false,created:Date.now()},true)});
+  render();toast(files.length+' Datei(en) eingetragen ✓ – bitte noch den Speicherort ergänzen.',5000);
+});
+
+/* ---------- Theme, Suche, Tasten ---------- */
+function applyTheme(light){document.body.classList.toggle('light',light);document.getElementById('themeIc').innerHTML=I(light?'moon':'sun',17);document.getElementById('themeTx').textContent=light?'Dunkel':'Hell';lsSet('bo-theme',light)}
+applyTheme(lsGet('bo-theme',false));
+document.getElementById('themeBtn').onclick=()=>applyTheme(!document.body.classList.contains('light'));
+document.getElementById('backupBtn').onclick=openBackup;
+document.getElementById('bkIc').innerHTML=I('shield',17);
+document.getElementById('sIc').innerHTML='<span style="color:var(--mut)">'+I('search',18)+'</span>';
+document.getElementById('addIc').innerHTML=I('plus',18);
+document.getElementById('addBtn').onclick=()=>openEditor(null,TYPES[view]?view:'doc');
+const q=document.getElementById('q');
+q.addEventListener('input',()=>{query=q.value.trim();render()});
+document.addEventListener('keydown',e=>{
+  const ov=document.getElementById('ov').classList.contains('on');
+  const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+  if(e.ctrlKey&&e.key.toLowerCase()==='k'){e.preventDefault();q.focus();q.select()}
+  else if(e.ctrlKey&&e.key.toLowerCase()==='n'){e.preventDefault();openEditor(null,TYPES[view]?view:'doc')}
+  else if(e.key==='Escape'){if(ov)closeEditor();else if(query){q.value='';query='';render()}}
+  else if(ov&&e.ctrlKey&&e.key==='Enter'&&document.getElementById('saveBtn')){e.preventDefault();commit()}
+  else if(!typing&&!ov&&!e.ctrlKey&&!e.altKey){
+    const map={'1':'home','2':'doc','3':'xls','4':'note','5':'mail','6':'web','7':'fav'};
+    if(map[e.key])go(map[e.key]);else if(e.key.toLowerCase()==='t')applyTheme(!document.body.classList.contains('light'));
+  }
+});
+setInterval(()=>{const c=document.getElementById('clk');if(c)c.textContent=new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})},20000);
+render();
+</script>
+</body>
+</html>
