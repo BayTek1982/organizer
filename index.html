@@ -120,6 +120,10 @@ textarea.f{min-height:110px;resize:vertical;line-height:1.5}
 textarea.f.note{min-height:340px;font-size:14.5px}
 .mfoot{display:flex;gap:8px;margin-top:20px;align-items:center}
 .mfoot .sp{flex:1}
+.dz{border:2px dashed var(--line2);border-radius:14px;padding:16px;text-align:center;color:var(--txt);cursor:pointer;background:var(--bg2);line-height:1.6;transition:.15s}
+.dz span{color:var(--mut);font-size:12.5px}
+.dz:hover{border-color:var(--home)}
+.dz.has{border-style:solid;border-color:color-mix(in srgb,var(--xls) 50%,var(--line))}
 .warn{font-size:12px;color:var(--note);margin-top:6px}
 .danger{color:var(--danger)!important;border-color:color-mix(in srgb,var(--danger) 40%,var(--line))!important}
 #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(30px);opacity:0;background:var(--card2);border:1px solid var(--line2);color:var(--txt);padding:12px 18px;border-radius:12px;box-shadow:var(--shadow);transition:.25s;z-index:60;max-width:640px;font-size:13.5px;line-height:1.5}
@@ -147,7 +151,7 @@ textarea.f.note{min-height:340px;font-size:14.5px}
   <div id="view"></div>
 </main>
 
-<div id="drop"><div>Dateien hier ablegen<br><span style="font-size:14px;color:#aab">werden als Dokument / Excel eingetragen</span></div></div>
+<div id="drop"><div>Dateien hier ablegen<br><span style="font-size:14px;color:#aab">Name, Typ und Größe werden automatisch erkannt</span></div></div>
 
 <div class="ov" id="ov"><div class="modal" id="modal"></div></div>
 <div id="toast"></div>
@@ -241,9 +245,44 @@ async function save(it,silent){
 }
 async function removeItem(id){
   items=items.filter(x=>x.id!==id);lsSet(LS,items);render();
+  try{FDB.del(id)}catch(e){}
   if(db&&mode==='db'){try{await db.doc('items/'+id).delete()}catch(e){}}
 }
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+/* ---------- Dateien (Kopie im Browser-Speicher) ---------- */
+const FDB=(()=>{let p;function open(){if(p)return p;p=new Promise((res,rej)=>{try{const r=indexedDB.open('bo-files',1);r.onupgradeneeded=()=>r.result.createObjectStore('files');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}catch(e){rej(e)}});return p}
+  function tx(mode,fn){return open().then(db=>new Promise((res,rej)=>{const t=db.transaction('files',mode);const r=fn(t.objectStore('files'));t.oncomplete=()=>res(r&&r.result);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)}))}
+  return{put:(id,f)=>tx('readwrite',s=>s.put(f,id)),get:id=>tx('readonly',s=>s.get(id)),del:id=>tx('readwrite',s=>s.delete(id))}})();
+try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
+const XLS_EXT=['xls','xlsx','xlsm','xlsb','csv','ods','numbers'];
+const fileKind=n=>XLS_EXT.includes((n.split('.').pop()||'').toLowerCase())?'xls':'doc';
+const baseName=n=>n.replace(/\.[^.]+$/,'');
+const VIEWABLE=/\.(pdf|png|jpe?g|gif|webp|svg|txt)$/i;
+function fmtSize(b){if(!b&&b!==0)return'';if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(0)+' KB';return(b/1048576).toFixed(1).replace('.',',')+' MB'}
+function fileMeta(f){return{fileName:f.name,fileSize:f.size,fileModified:f.lastModified||Date.now(),hasFile:true}}
+async function storeFile(id,f){try{await FDB.put(id,f);return true}catch(e){console.warn(e);return false}}
+async function addFiles(files){
+  let ok=0;
+  for(const f of files){
+    const id=uid();const stored=await storeFile(id,f);
+    const it=Object.assign({id,type:fileKind(f.name),title:baseName(f.name),path:'',group:(TYPES[view]&&group)||'',text:'',fav:false,created:Date.now()},fileMeta(f));
+    if(!stored)it.hasFile=false;else ok++;
+    save(it,true);
+  }
+  render();
+  toast(ok===files.length?`${files.length} Datei(en) hinzugefügt ✓ – Name und Typ erkannt, „Öffnen“ funktioniert sofort.`:`${files.length} Datei(en) eingetragen. Die Datei selbst konnte hier nicht gespeichert werden – nutze dafür organizer.kompassapps.de.`,5500);
+}
+async function openFile(id,download){
+  const it=items.find(x=>x.id===id);let f=null;
+  try{f=await FDB.get(id)}catch(e){}
+  if(!f){toast('Die Datei liegt nicht in diesem Browser (sie wurde an einem anderen PC/Ort hineingezogen).'+(it&&it.path?' Nutze „Pfad“.':' Zieh sie hier einfach nochmal hinein.'),6000);return}
+  const url=URL.createObjectURL(f);const a=document.createElement('a');a.href=url;
+  const view=!download&&VIEWABLE.test(it.fileName||'');
+  if(view){a.target='_blank';a.rel='noopener'}else a.download=it.fileName||'datei';
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),120000);
+  if(!view)toast('Datei wird heruntergeladen – oben rechts im Browser anklicken, dann öffnet sie sich in Word bzw. Excel.',6000);
+}
 
 /* ---------- Helpers ---------- */
 function toast(t,ms=3200){const el=document.getElementById('toast');el.innerHTML=t;el.classList.add('on');clearTimeout(toast._t);toast._t=setTimeout(()=>el.classList.remove('on'),ms)}
@@ -253,7 +292,7 @@ const fixUrl=s=>/^www\./i.test(s)?'https://'+s:s;
 function when(ts){if(!ts)return'';const d=new Date(ts),n=new Date();const diff=(n-d)/864e5;
   if(d.toDateString()===n.toDateString())return'heute '+d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
   if(diff<2)return'gestern';return d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'})}
-function matches(it,q){if(!q)return true;q=q.toLowerCase();return[it.title,it.path,it.group,it.text,it.extra].some(v=>(v||'').toLowerCase().includes(q))}
+function matches(it,q){if(!q)return true;q=q.toLowerCase();return[it.title,it.path,it.group,it.text,it.extra,it.fileName].some(v=>(v||'').toLowerCase().includes(q))}
 function count(t){return items.filter(x=>x.type===t).length}
 
 /* ---------- Navigation ---------- */
@@ -301,7 +340,7 @@ function renderHome(){
   </div>`;
 }
 function hintFor(t){
-  if(t==='doc'||t==='xls')return`<div class="hint" style="--c:${TYPES[t].c}"><b>So öffnest du Dateien vom PC:</b> Klicke auf <b>„Öffnen“</b> – der Pfad wird kopiert. Dann <kbd>Windows</kbd> + <kbd>R</kbd> drücken, <kbd>Strg</kbd> + <kbd>V</kbd> einfügen, <kbd>Enter</kbd>. Links zu OneDrive / Google Drive öffnen sich direkt. Den Pfad bekommst du im Explorer: Datei mit <b>Rechtsklick → „Als Pfad kopieren“</b>.</div>`;
+  if(t==='doc'||t==='xls')return`<div class="hint" style="--c:${TYPES[t].c}"><b>Am einfachsten:</b> Dateien aus dem Explorer einfach <b>in dieses Fenster ziehen</b> – Name, Typ und Größe werden automatisch erkannt und eine Kopie wird gespeichert. <b>„Öffnen“</b> zeigt PDFs und Bilder direkt, Word/Excel werden geöffnet. <br><span style="color:var(--dim)">Hinweis: Es ist eine Kopie – änderst du das Original, zieh die neue Version einfach wieder auf den Eintrag (Bearbeiten). Optional kannst du zusätzlich den Pfad eintragen (Rechtsklick → „Als Pfad kopieren“).</span></div>`;
   if(t==='mail')return`<div class="hint" style="--c:var(--mail)">${I('shield',14)} <b>Keine Passwörter hier speichern.</b> Dafür ist ein Passwort-Manager (z. B. Bitwarden oder der Google-Passwortmanager) da. Hier nur Adresse, Anbieter, Zweck und Login-Seite.</div>`;
   return'';
 }
@@ -320,8 +359,10 @@ function renderList(list,title,c,mixed){
 function card(it){
   const T=TYPES[it.type];let acts='',body='';
   if(it.type==='doc'||it.type==='xls'){
+    if(it.fileName)body+=`<div class="path" title="${esc(it.fileName)}">📎 ${esc(it.fileName)} · ${fmtSize(it.fileSize)}</div>`;
     if(it.path)body+=`<div class="path" title="${esc(it.path)}">${esc(it.path)}</div>`;
-    if(it.path)acts+=isUrl(it.path)?`<a class="act" href="${esc(fixUrl(it.path))}" target="_blank" rel="noopener">${I('open',13)} Öffnen</a>`:`<button class="act" data-openpath="${it.id}">${I('open',13)} Öffnen</button><button class="act" data-copy="${esc(it.path)}">${I('copy',13)} Pfad</button>`;
+    if(it.hasFile){acts+=`<button class="act" data-openfile="${it.id}">${I('open',13)} Öffnen</button><button class="act" data-dlfile="${it.id}">⬇ Herunterladen</button>`;if(it.path)acts+=`<button class="act" data-copy="${esc(it.path)}">${I('copy',13)} Pfad</button>`}
+    else if(it.path)acts+=isUrl(it.path)?`<a class="act" href="${esc(fixUrl(it.path))}" target="_blank" rel="noopener">${I('open',13)} Öffnen</a>`:`<button class="act" data-openpath="${it.id}">${I('open',13)} Öffnen</button><button class="act" data-copy="${esc(it.path)}">${I('copy',13)} Pfad</button>`;
   }else if(it.type==='mail'){
     body+=`<div class="path">${esc(it.path)}</div>`;
     acts+=`<button class="act" data-copy="${esc(it.path)}">${I('copy',13)} Adresse kopieren</button>`;
@@ -353,11 +394,20 @@ document.getElementById('view').addEventListener('click',e=>{
   else if(d.edit||d.open){openEditor(items.find(x=>x.id===(d.edit||d.open)))}
   else if(d.copy){copy(d.copy)}
   else if(d.copyNote){const it=items.find(x=>x.id===d.copyNote);copy(it.text||'','Notiz kopiert ✓')}
+  else if(d.openfile){openFile(d.openfile,false)}
+  else if(d.dlfile){openFile(d.dlfile,true)}
   else if(d.openpath){const it=items.find(x=>x.id===d.openpath);copy(it.path,'Pfad kopiert ✓ – jetzt <kbd>Windows</kbd>+<kbd>R</kbd>, <kbd>Strg</kbd>+<kbd>V</kbd>, <kbd>Enter</kbd>',6000)}
 });
 
 /* ---------- Editor ---------- */
-let edType='doc',edItem=null;
+let edType='doc',edItem=null,pendingFile=null;
+function setPending(f){
+  if(!f)return;
+  const cur=collect();pendingFile=f;edType=fileKind(f.name);
+  drawEditor();
+  const t=document.getElementById('fTitle');if(t&&!(cur.title||'').trim())t.value=baseName(f.name);
+  toast('Erkannt: <b>'+esc(f.name)+'</b> → '+TYPES[edType].one+' ✓');
+}
 function fieldsFor(t,it){
   it=it||{};
   const g=[...new Set(items.filter(x=>x.type===t).map(x=>x.group).filter(Boolean))];
@@ -366,7 +416,8 @@ function fieldsFor(t,it){
   if(t==='note')return`<label>Titel</label><input class="f" id="fTitle" value="${esc(it.title)}" placeholder="z. B. Ideen für die Shrinkflation-App">${grp}<label>Notiz</label><textarea class="f note" id="fText" placeholder="Schreib einfach los …">${esc(it.text)}</textarea>`;
   if(t==='mail')return`<label>E-Mail-Adresse</label><input class="f" id="fPath" value="${esc(it.path)}" placeholder="name@gmail.com"><label>Bezeichnung</label><input class="f" id="fTitle" value="${esc(it.title)}" placeholder="z. B. Privat, Trading, YouTube-Kanal">${grp}<label>Login-Seite / Postfach-Link</label><input class="f" id="fExtra" value="${esc(it.extra)}" placeholder="https://mail.google.com"><label>Notiz <span style="color:var(--dim);font-weight:400">(wofür, Anbieter … aber kein Passwort)</span></label><textarea class="f" id="fText">${esc(it.text)}</textarea><div class="warn">${I('shield',12)} Bitte keine Passwörter eintragen.</div>`;
   if(t==='web')return`<label>Adresse (URL)</label><input class="f" id="fPath" value="${esc(it.path)}" placeholder="https://…"><label>Name</label><input class="f" id="fTitle" value="${esc(it.title)}" placeholder="z. B. Bayazit Wetter">${grp}<label>Notiz</label><textarea class="f" id="fText">${esc(it.text)}</textarea>`;
-  return`<label>Name</label><input class="f" id="fTitle" value="${esc(it.title)}" placeholder="${t==='xls'?'z. B. Kaffeekasse 2026':'z. B. Steuerbescheid 2024'}"><label>Speicherort – Pfad oder Link</label><input class="f" id="fPath" value="${esc(it.path)}" placeholder="C:\\Users\\Tekin\\Documents\\… oder OneDrive-/Google-Drive-Link"><div style="font-size:12px;color:var(--dim);margin-top:6px">Tipp: Im Explorer Datei mit Rechtsklick → <b>„Als Pfad kopieren“</b>, hier mit Strg + V einfügen.</div>${grp}<label>Notiz</label><textarea class="f" id="fText" placeholder="Worum geht es, was ist zu tun …">${esc(it.text)}</textarea>`;
+  const dz=`<div class="dz${it.fileName?' has':''}" id="dz">${it.fileName?`📎 <b>${esc(it.fileName)}</b> · ${fmtSize(it.fileSize)}<br><span>Andere Datei hineinziehen oder klicken, um sie zu ersetzen</span>`:`<b>Datei hier hineinziehen</b> oder klicken zum Auswählen<br><span>Name, Typ und Größe werden automatisch erkannt</span>`}<input type="file" id="dzIn" hidden></div>`;
+  return`${dz}<label>Name</label><input class="f" id="fTitle" value="${esc(it.title)}" placeholder="${t==='xls'?'z. B. Kaffeekasse 2026':'z. B. Steuerbescheid 2024'}"><label>Speicherort – Pfad oder Link</label><input class="f" id="fPath" value="${esc(it.path)}" placeholder="C:\\Users\\Tekin\\Documents\\… oder OneDrive-/Google-Drive-Link"><div style="font-size:12px;color:var(--dim);margin-top:6px">Tipp: Im Explorer Datei mit Rechtsklick → <b>„Als Pfad kopieren“</b>, hier mit Strg + V einfügen.</div>${grp}<label>Notiz</label><textarea class="f" id="fText" placeholder="Worum geht es, was ist zu tun …">${esc(it.text)}</textarea>`;
 }
 function openEditor(it,type){
   edItem=it||null;edType=it?it.type:(type||'doc');
@@ -380,20 +431,28 @@ function drawEditor(){
   const cur=collect();
   m.innerHTML=`<h2>${edItem?'Bearbeiten':'Neuer Eintrag'}</h2>
   ${edItem?'':`<div class="types">${Object.keys(TYPES).map(k=>`<button class="ty ${k===edType?'on':''}" style="--c:${TYPES[k].c}" data-ty="${k}">${I(k,20)}${TYPES[k].one.replace('-Adresse','').replace('-Datei','')}</button>`).join('')}</div>`}
-  ${fieldsFor(edType,Object.assign({},edItem||{},cur))}
+  ${fieldsFor(edType,Object.assign({},edItem||{},cur,pendingFile?fileMeta(pendingFile):{}))}
   <div class="mfoot">${edItem?`<button class="btn sm danger" id="delBtn">Löschen</button>`:''}<span class="sp"></span>
   <button class="btn sm" id="cancelBtn">Abbrechen</button><button class="btn sm pri" id="saveBtn">Speichern <kbd style="background:rgba(255,255,255,.18);color:#fff;border-color:rgba(255,255,255,.35)">Strg ↵</kbd></button></div>`;
+  const dz=document.getElementById('dz'),dzIn=document.getElementById('dzIn');
+  if(dz){dz.onclick=()=>dzIn.click();dzIn.onchange=()=>setPending(dzIn.files[0])}
 }
 function collect(){const v=id=>{const el=document.getElementById(id);return el?el.value:undefined};const o={};[['title','fTitle'],['path','fPath'],['group','fGroup'],['text','fText'],['extra','fExtra']].forEach(([k,id])=>{const x=v(id);if(x!==undefined)o[k]=x});return o}
-function closeEditor(){document.getElementById('ov').classList.remove('on');edItem=null}
+function closeEditor(){document.getElementById('ov').classList.remove('on');edItem=null;pendingFile=null}
 function commit(){
   const c=collect();
   c.title=(c.title||'').trim();c.path=(c.path||'').trim();c.group=(c.group||'').trim();
   if(!c.title&&edType==='mail')c.title=c.path;
   if(!c.title&&edType==='web')c.title=c.path.replace(/^https?:\/\/(www\.)?/,'').split('/')[0];
   if(!c.title){toast('Bitte einen Namen eintragen.');return}
-  const it=Object.assign({},edItem||{id:uid(),type:edType,fav:false,created:Date.now()},c);
-  save(it);closeEditor();toast(edItem?'Gespeichert ✓':'Hinzugefügt ✓');
+  const it=Object.assign({},edItem||{id:uid(),fav:false,created:Date.now()},c,{type:edType});
+  const pf=pendingFile,wasEdit=!!edItem;
+  if(pf&&(edType==='doc'||edType==='xls')){
+    Object.assign(it,fileMeta(pf));closeEditor();
+    storeFile(it.id,pf).then(ok=>{if(!ok){it.hasFile=false;toast('Eintrag gespeichert – die Datei selbst konnte hier nicht abgelegt werden.',5000)}save(it)});
+    toast(wasEdit?'Gespeichert ✓':'Hinzugefügt ✓');return;
+  }
+  save(it);closeEditor();toast(wasEdit?'Gespeichert ✓':'Hinzugefügt ✓');
 }
 document.getElementById('modal').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
@@ -437,10 +496,11 @@ window.addEventListener('dragleave',()=>{dragN=Math.max(0,dragN-1);if(!dragN)dro
 window.addEventListener('dragover',e=>e.preventDefault());
 window.addEventListener('drop',e=>{
   e.preventDefault();dragN=0;drop.classList.remove('on');
-  const files=[...(e.dataTransfer.files||[])];if(!files.length)return;
-  files.forEach(f=>{const isX=/\.(xlsx?|xlsm|csv|ods)$/i.test(f.name);
-    save({id:uid(),type:isX?'xls':'doc',title:f.name.replace(/\.[^.]+$/,''),path:'',group:'',text:'Datei: '+f.name+' – Pfad noch eintragen (Rechtsklick → „Als Pfad kopieren“)',fav:false,created:Date.now()},true)});
-  render();toast(files.length+' Datei(en) eingetragen ✓ – bitte noch den Speicherort ergänzen.',5000);
+  const files=[...(e.dataTransfer.files||[])].filter(f=>f.size>0||/\./.test(f.name));if(!files.length)return;
+  const ovOn=document.getElementById('ov').classList.contains('on');
+  if(ovOn&&document.getElementById('fTitle')&&(edType==='doc'||edType==='xls'||!edItem)){setPending(files[0]);return}
+  if(ovOn)return;
+  addFiles(files);
 });
 
 /* ---------- Theme, Suche, Tasten ---------- */
