@@ -142,6 +142,7 @@ textarea.f.note{min-height:340px;font-size:14.5px}
   <div id="nav"></div>
   <div class="side-foot">
     <button class="nav" id="themeBtn"><span id="themeIc"></span><span id="themeTx">Hell</span><span class="n">T</span></button>
+    <button class="nav" id="syncBtn"><span id="syIc"></span>Browser-Abgleich<span class="n"></span></button>
     <button class="nav" id="backupBtn"><span id="bkIc"></span>Sicherung<span class="n"></span></button>
     <div class="status local" id="status"><i></i>Verbinde …</div>
   </div>
@@ -217,7 +218,10 @@ items=lsGet(LS,[]);
 function setStatus(){
   const s=document.getElementById('status');
   if(mode==='db'){s.className='status';s.innerHTML='<i></i>Gespeichert in deinem<br>Claude-Konto · privat';}
-  else{s.className='status local';s.innerHTML='<i></i>Nur in diesem Browser<br>gespeichert – Sicherung machen!';}
+  else if(sync&&syncState==='ok'){s.className='status';s.innerHTML='<i></i>Abgleich mit GitHub aktiv<br>zuletzt '+new Date(syncTime).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' Uhr';}
+  else if(sync&&syncState==='busy'){s.className='status';s.innerHTML='<i></i>Gleiche ab …';}
+  else if(sync&&syncState==='err'){s.className='status local';s.innerHTML='<i></i>Abgleich fehlgeschlagen<br>'+esc(syncErr)+'';}
+  else{s.className='status local';s.innerHTML='<i></i>Nur in diesem Browser<br>gespeichert – Abgleich einrichten!';}
 }
 function normDocs(snap){
   let arr=[];
@@ -261,13 +265,98 @@ async function save(it,silent){
   lsSet(LS,items);
   if(!silent)render();
   if(db&&mode==='db'){try{await db.doc('items/'+it.id).set(it)}catch(e){toast('Speichern online fehlgeschlagen – lokal gesichert.')}}
+  schedulePush();
 }
 async function removeItem(id){
   items=items.filter(x=>x.id!==id);lsSet(LS,items);render();
   try{FDB.del(id)}catch(e){}
+  tomb[id]=Date.now();lsSet('bo-tomb',tomb);schedulePush();
   if(db&&mode==='db'){try{await db.doc('items/'+id).delete()}catch(e){}}
 }
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+/* ---------- Browser-Abgleich über GitHub ---------- */
+var sync=lsGet('bo-sync',null),tomb=lsGet('bo-tomb',{}),syncState='',syncErr='',syncTime=0,syncSha=null,pushTimer=null,syncBusy=false,syncAgain=false;
+const SYNC_FILE='organizer-daten.json';
+const b64e=s=>{const b=new TextEncoder().encode(s);let r='';for(let i=0;i<b.length;i+=0x8000)r+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));return btoa(r)};
+const b64d=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g,'')),c=>c.charCodeAt(0)));
+function ghUrl(){return`https://api.github.com/repos/${sync.repo}/contents/${SYNC_FILE}`}
+function ghHead(extra){return Object.assign({'Authorization':'Bearer '+sync.token,'Accept':'application/vnd.github+json'},extra||{})}
+async function ghPull(){
+  const r=await fetch(ghUrl()+'?t='+Date.now(),{headers:ghHead(),cache:'no-store'});
+  if(r.status===404){syncSha=null;return{items:[],tomb:{}}}
+  if(r.status===401)throw new Error('Schlüssel (Token) ungültig');
+  if(r.status===403)throw new Error('Keine Berechtigung');
+  if(!r.ok)throw new Error('GitHub-Fehler '+r.status);
+  const j=await r.json();syncSha=j.sha;let txt;
+  if(j.content)txt=b64d(j.content);
+  else{const r2=await fetch(ghUrl()+'?t='+Date.now(),{headers:ghHead({'Accept':'application/vnd.github.raw+json'}),cache:'no-store'});txt=await r2.text()}
+  try{return JSON.parse(txt)}catch(e){return{items:[],tomb:{}}}
+}
+async function ghPush(data){
+  const body={message:'Organizer-Abgleich '+new Date().toLocaleString('de-DE'),content:b64e(JSON.stringify(data))};
+  if(syncSha)body.sha=syncSha;
+  const r=await fetch(ghUrl(),{method:'PUT',headers:ghHead({'Content-Type':'application/json'}),body:JSON.stringify(body)});
+  if(r.status===409||r.status===422)return false;
+  if(r.status===404)throw new Error('Repo „'+sync.repo+'“ nicht gefunden');
+  if(r.status===401)throw new Error('Schlüssel (Token) ungültig');
+  if(r.status===403)throw new Error('Token darf nicht schreiben');
+  if(!r.ok)throw new Error('GitHub-Fehler '+r.status);
+  const j=await r.json();syncSha=j.content&&j.content.sha;return true;
+}
+function mergeData(remote){
+  const t=Object.assign({},remote.tomb||{});for(const k in tomb)t[k]=Math.max(t[k]||0,tomb[k]);
+  const map={};
+  [...(remote.items||[]),...items].forEach(x=>{if(!x||!x.id||!x.type)return;const o=map[x.id];if(!o||(x.updated||0)>(o.updated||0))map[x.id]=x});
+  const out=Object.values(map).filter(x=>!(t[x.id]&&t[x.id]>=(x.updated||0)));
+  const cut=Date.now()-180*864e5;for(const k in t)if(t[k]<cut)delete t[k];
+  return{items:out,tomb:t};
+}
+async function syncNow(manual){
+  if(!sync||mode==='db')return;
+  if(syncBusy){syncAgain=true;return}
+  syncBusy=true;syncState='busy';setStatus();
+  try{
+    for(let tries=0;tries<3;tries++){
+      const remote=await ghPull();
+      const m=mergeData(remote);
+      const changed=JSON.stringify(m.items.map(x=>x.id+':'+x.updated).sort())!==JSON.stringify(items.map(x=>x.id+':'+x.updated).sort());
+      items=m.items;tomb=m.tomb;lsSet(LS,items);lsSet('bo-tomb',tomb);
+      if(changed&&!document.getElementById('ov').classList.contains('on'))render();
+      const remoteSame=JSON.stringify((remote.items||[]).map(x=>x.id+':'+x.updated).sort())===JSON.stringify(items.map(x=>x.id+':'+x.updated).sort());
+      if(remoteSame&&syncSha)break;
+      if(await ghPush({version:2,updated:Date.now(),items,tomb}))break;
+    }
+    syncState='ok';syncTime=Date.now();if(manual)toast('Abgleich fertig ✓ – '+items.length+' Einträge');
+  }catch(e){syncState='err';syncErr=e.message||'Verbindung';if(manual)toast('Abgleich fehlgeschlagen: '+esc(syncErr),6000)}
+  syncBusy=false;setStatus();
+  if(syncAgain){syncAgain=false;syncNow()}
+}
+function schedulePush(){if(!sync||mode==='db')return;clearTimeout(pushTimer);pushTimer=setTimeout(()=>syncNow(),1500)}
+window.addEventListener('focus',()=>{if(sync&&Date.now()-syncTime>5000)syncNow()});
+setInterval(()=>{if(sync&&document.visibilityState==='visible')syncNow()},120000);
+
+function openSync(){
+  const m=document.getElementById('modal');m.className='modal wide';
+  if(mode==='db'){m.innerHTML=`<h2>Browser-Abgleich</h2><div class="hint" style="--c:var(--xls)">Diese Version läuft in Claude und ist schon automatisch mit deinem Claude-Konto abgeglichen – in jedem Browser, in dem du bei Claude angemeldet bist. Der GitHub-Abgleich ist für <b>organizer.kompassapps.de</b> und die lokale HTML-Datei gedacht.</div><div class="mfoot"><span class="sp"></span><button class="btn sm" id="bkClose">Schließen</button></div>`;document.getElementById('ov').classList.add('on');return}
+  m.innerHTML=`<h2>Browser-Abgleich (Firefox, Opera, Chrome, Edge …)</h2>
+  <div class="hint" style="--c:var(--web)">Deine Einträge werden in einem <b>privaten GitHub-Repo</b> gespeichert. Jeder Browser und jeder PC, in dem du das einmal einrichtest, hat danach automatisch denselben Stand – Änderungen kommen nach wenigen Sekunden bzw. beim Wechseln ins Fenster an.<br><span style="color:var(--dim)">Hineingezogene Dateien (Kopien) bleiben im jeweiligen Browser – die bringst du mit „Sicherung → Als Datei speichern“ rüber.</span></div>
+  ${sync?`<div class="hint" style="--c:var(--xls)">✓ Verbunden mit <b>${esc(sync.repo)}</b>${syncState==='ok'?' · zuletzt abgeglichen '+new Date(syncTime).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' Uhr':''}${syncState==='err'?' · <span style="color:var(--danger)">Fehler: '+esc(syncErr)+'</span>':''}</div>`:''}
+  <label>Repo (Besitzer/Name)</label><input class="f" id="syRepo" value="${esc(sync?sync.repo:'BayTek1982/organizer-daten')}">
+  <label>Schlüssel (Fine-grained Token von GitHub)</label><input class="f" id="syTok" type="password" value="${esc(sync?sync.token:'')}" placeholder="github_pat_…">
+  <div class="warn">${I('shield',12)} Der Schlüssel wird nur in diesem Browser gespeichert. Gib ihm nur Zugriff auf das Repo „organizer-daten“.</div>
+  <div class="mfoot">${sync?'<button class="btn sm danger" id="syOff">Trennen</button>':''}<span class="sp"></span><button class="btn sm" id="bkClose">Schließen</button>${sync?'<button class="btn sm" id="syNow">Jetzt abgleichen</button>':''}<button class="btn sm pri" id="syOn">${sync?'Speichern':'Verbinden'}</button></div>`;
+  document.getElementById('ov').classList.add('on');
+}
+async function connectSync(){
+  const repo=document.getElementById('syRepo').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\/$/,'');
+  const token=document.getElementById('syTok').value.trim();
+  if(!/^[^/\s]+\/[^/\s]+$/.test(repo)){toast('Repo bitte als Besitzer/Name, z. B. BayTek1982/organizer-daten');return}
+  if(!token){toast('Bitte den Schlüssel (Token) einfügen.');return}
+  const old=sync;sync={repo,token};syncSha=null;
+  try{await ghPull()}catch(e){sync=old;toast('Verbindung fehlgeschlagen: '+esc(e.message),6000);return}
+  lsSet('bo-sync',sync);closeEditor();toast('Verbunden ✓ – gleiche ab …');syncNow(true);
+}
 
 /* ---------- Dateien (Kopie im Browser-Speicher) ---------- */
 const FDB=(()=>{let p;function open(){if(p)return p;p=new Promise((res,rej)=>{try{const r=indexedDB.open('bo-files',1);r.onupgradeneeded=()=>r.result.createObjectStore('files');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}catch(e){rej(e)}});return p}
@@ -493,6 +582,10 @@ document.getElementById('modal').addEventListener('click',e=>{
   else if(b.id==='bkCopy'){copy(document.getElementById('bkOut').value,'Sicherung kopiert ✓ – z. B. in eine Textdatei einfügen und speichern.',5000)}
   else if(b.id==='bkImport'){doImport(document.getElementById('bkIn').value)}
   else if(b.id==='bkClose')closeEditor();
+  else if(b.id==='syOn')connectSync();
+  else if(b.id==='syNow'){closeEditor();syncNow(true)}
+  else if(b.id==='syOff'){if(b.dataset.sure){sync=null;lsSet('bo-sync',null);try{localStorage.removeItem('bo-sync')}catch(e){};syncState='';closeEditor();setStatus();toast('Abgleich getrennt. Deine Einträge bleiben in diesem Browser.')}else{b.dataset.sure=1;b.textContent='Wirklich trennen?'}}
+  else if(b.id==='bkFileSave')exportFile();
 });
 document.getElementById('ov').addEventListener('mousedown',e=>{if(e.target.id==='ov')closeEditor()});
 
@@ -503,20 +596,41 @@ function openBackup(){
   <div class="hint" style="--c:var(--xls)">${mode==='db'?'Deine Einträge sind in deinem Claude-Konto gespeichert und auf jedem PC da, auf dem du angemeldet bist. Eine zusätzliche Sicherung schadet trotzdem nicht.':'Deine Einträge liegen gerade nur in diesem Browser. Mach regelmäßig eine Sicherung!'}</div>
   <label>1. Sichern – Text kopieren und als Datei speichern (z. B. <b>organizer-sicherung.txt</b>)</label>
   <textarea class="f" id="bkOut" readonly style="min-height:120px;font-family:var(--mono);font-size:12px">${esc(JSON.stringify(items))}</textarea>
-  <div style="margin-top:8px"><button class="btn sm" id="bkCopy">${I('copy',14)} Sicherung kopieren</button></div>
-  <label style="margin-top:20px">2. Wiederherstellen – Sicherungsdatei wählen oder Text einfügen</label>
+  <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm pri" id="bkFileSave">⬇ Als Datei speichern (mit hineingezogenen Dateien)</button><button class="btn sm" id="bkCopy">${I('copy',14)} Nur Text kopieren</button></div>
+  ${mode==='db'?'<div class="warn">In Claude ist das Speichern als Datei gesperrt – nutze hier „Nur Text kopieren“.</div>':''}
+  <label style="margin-top:20px">2. Wiederherstellen – Sicherungsdatei wählen (wird sofort eingelesen) oder Text einfügen</label>
   <input type="file" id="bkFile" accept=".txt,.json" class="f">
   <textarea class="f" id="bkIn" style="min-height:90px;font-family:var(--mono);font-size:12px;margin-top:8px" placeholder="Sicherungstext hier einfügen …"></textarea>
   <div class="mfoot"><span class="sp"></span><button class="btn sm" id="bkClose">Schließen</button><button class="btn sm pri" id="bkImport">Einlesen</button></div>`;
   document.getElementById('ov').classList.add('on');
-  document.getElementById('bkFile').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>document.getElementById('bkIn').value=r.result;r.readAsText(f)});
+  document.getElementById('bkFile').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>doImport(r.result);r.readAsText(f)});
 }
-function doImport(txt){
-  let arr;try{arr=JSON.parse(txt)}catch(e){toast('Das ist keine gültige Sicherung.');return}
-  if(!Array.isArray(arr)){toast('Das ist keine gültige Sicherung.');return}
-  let n=0;const ids=new Set(items.map(x=>x.id));
-  arr.forEach(x=>{if(x&&x.id&&x.type&&TYPES[x.type]&&!ids.has(x.id)){save(x,true);n++}});
-  render();closeEditor();toast(n+' Einträge eingelesen ✓ (vorhandene bleiben unverändert)');
+async function exportFile(){
+  const files={};let nf=0;
+  for(const it of items){if(!it.hasFile)continue;try{const f=await FDB.get(it.id);if(!f)continue;
+    const data=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(f)});
+    files[it.id]={name:f.name||it.fileName,type:f.type||'',data};nf++}catch(e){}}
+  const blob=new Blob([JSON.stringify({app:'Bayazit Organizer',version:2,created:Date.now(),items,files})],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='organizer-sicherung-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),60000);
+  toast(`Sicherung gespeichert ✓ – ${items.length} Einträge, ${nf} Dateien. Im anderen Browser unter „Sicherung → Datei wählen“ einlesen.`,6500);
+}
+async function doImport(txt){
+  let data;try{data=JSON.parse(txt)}catch(e){toast('Das ist keine gültige Sicherung.');return}
+  const arr=Array.isArray(data)?data:(data&&Array.isArray(data.items)?data.items:null);
+  if(!arr){toast('Das ist keine gültige Sicherung.');return}
+  const files=(data&&data.files)||{};
+  let n=0,u=0,nf=0;
+  for(const x of arr){
+    if(!x||!x.id||!x.type||!TYPES[x.type])continue;
+    const ex=items.find(y=>y.id===x.id);
+    if(files[x.id]){try{const fd=files[x.id];const bin=Uint8Array.from(atob(fd.data),c=>c.charCodeAt(0));if(await storeFile(x.id,new File([bin],fd.name,{type:fd.type})))nf++}catch(e){}}
+    if(!ex){items.push(x);n++}else if((x.updated||0)>(ex.updated||0)){Object.assign(ex,x);u++}
+  }
+  lsSet(LS,items);
+  if(db&&mode==='db'){for(const x of items){try{await db.doc('items/'+x.id).set(x)}catch(e){}}}
+  schedulePush();render();closeEditor();
+  toast(`Eingelesen ✓ – ${n} neu, ${u} aktualisiert${nf?', '+nf+' Dateien':''}`,5000);
 }
 
 /* ---------- Drag & Drop ---------- */
@@ -558,6 +672,9 @@ function applyTheme(light){document.body.classList.toggle('light',light);documen
 applyTheme(lsGet('bo-theme',false));
 document.getElementById('themeBtn').onclick=()=>applyTheme(!document.body.classList.contains('light'));
 document.getElementById('backupBtn').onclick=openBackup;
+document.getElementById('syncBtn').onclick=openSync;
+document.getElementById('syIc').innerHTML=I('web',17);
+if(sync)setTimeout(()=>{if(mode!=='db')syncNow()},1500);
 document.getElementById('bkIc').innerHTML=I('shield',17);
 document.getElementById('sIc').innerHTML='<span style="color:var(--mut)">'+I('search',18)+'</span>';
 document.getElementById('addIc').innerHTML=I('plus',18);
